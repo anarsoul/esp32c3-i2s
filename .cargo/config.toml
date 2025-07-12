@@ -2,6 +2,8 @@
 runner = "espflash flash --monitor --chip esp32c3"
 
 [env]
+ESP_LOG="info"
+CC="riscv64-elf-gcc"
 
 [build]
 rustflags = [
