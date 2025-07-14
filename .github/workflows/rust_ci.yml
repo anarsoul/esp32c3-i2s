@@ -11,6 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CC: riscv-none-elf-gcc
 
 jobs:
   rust-checks:
@@ -35,6 +36,15 @@ jobs:
           target: riscv32imc-unknown-none-elf
           toolchain: stable
           components: rust-src, rustfmt, clippy
+      - name: Setup RISCV32 toolchain
+        run: |
+          RISC_V_GCC_VERSION="14.2.0-3"
+          RISC_V_GCC_URL="https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v${RISC_V_GCC_VERSION}/xpack-riscv-none-elf-gcc-${RISC_V_GCC_VERSION}-linux-x64.tar.gz"
+
+          curl -LO "$RISC_V_GCC_URL"
+          tar -xzf xpack-riscv-none-elf-gcc-${RISC_V_GCC_VERSION}-linux-x64.tar.gz
+          echo "$(pwd)/xpack-riscv-none-elf-gcc-${RISC_V_GCC_VERSION}/bin" >> $GITHUB_PATH
+
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
       - name: Run command
