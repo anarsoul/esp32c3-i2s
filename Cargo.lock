@@ -583,6 +583,7 @@ dependencies = [
 name = "esp32c3-i2s"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "critical-section",
  "embassy-executor",
  "embassy-time",

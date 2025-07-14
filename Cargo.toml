@@ -18,7 +18,8 @@ esp-hal-embassy  = { version = "0.8.1", features = ["esp32c3"] }
 static_cell      = { version = "2.1.0", features = ["nightly"] }
 esp-println     = { version = "0.12.0", features = ["esp32c3", "log"] }
 log = { version = "0.4.27" }
-threepm = "0.2.0"
+threepm = { version = "0.2.0", features = [] }
+bytemuck = "1.23.1"
 
 [profile.dev]
 # Rust debug is too slow.
