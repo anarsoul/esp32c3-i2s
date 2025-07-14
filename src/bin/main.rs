@@ -7,14 +7,13 @@
 )]
 
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::{dma_buffers, peripherals, ram};
+use esp_hal::{dma_buffers, ram};
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::spi;
 use esp_hal::time::Rate;
-use threepm::easy_mode::{EasyMode, EasyModeErr};
+use threepm::easy_mode::EasyMode;
 use bytemuck::cast_slice;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Output, OutputConfig, Level};
@@ -50,9 +49,10 @@ impl embedded_sdmmc::TimeSource for TimeSource {
 }
 
 struct Error;
+type MyDirectory<'a, 'b> =  Directory<'a, SdCard<embedded_hal_bus::spi::ExclusiveDevice<spi::master::Spi<'b, esp_hal::Blocking>, Output<'b>, embedded_hal_bus::spi::NoDelay>, Delay>, TimeSource, 4, 4, 1>;
 
-fn list_dir(directory: Directory<'_, SdCard<embedded_hal_bus::spi::ExclusiveDevice<spi::master::Spi<'_, esp_hal::Blocking>, Output<'_>, embedded_hal_bus::spi::NoDelay>, Delay>, TimeSource, 4, 4, 1>, path: &str) -> Result<(), Error> {
-    log::info!("Listing {}", path);
+fn list_dir(directory: MyDirectory<'_, '_>, path: &str) -> Result<(), Error> {
+    log::info!("Listing {path}");
     directory.iterate_dir(|entry| {
         log::info!(
             "{:12} {:9} {} {}",
@@ -88,6 +88,7 @@ async fn main(_spawner: Spawner) {
     esp_hal_embassy::init(timer0.alarm0);
 
     let dma_channel = peripherals.DMA_CH0;
+    #[allow(clippy::manual_div_ceil)]
     let (_, _, tx_buffer, tx_descriptors) = dma_buffers!(4 * 4096, 4 * 4096);
 
     let mosi = peripherals.GPIO4;
@@ -117,7 +118,7 @@ async fn main(_spawner: Spawner) {
     // Try and access Volume 0 (i.e. the first partition).
     // The volume object holds information about the filesystem on that volume.
     let volume0 = volume_mgr.open_volume(VolumeIdx(0)).unwrap();
-    log::info!("Volume 0: {:?}", volume0);
+    log::info!("Volume 0: {volume0:?}");
     // Open the root directory (mutably borrows from the volume).
     let root_dir = volume0.open_root_dir().unwrap();
     // List files in the root directory.
@@ -160,7 +161,7 @@ async fn main(_spawner: Spawner) {
     while !easy.mp3_decode_ready() && easy.buffer_free() >= CHUNK_SZ {
         if !f.is_eof() {
             let len = f.read(&mut readbuf).unwrap();
-            log::info!("Read {} bytes from file", len);
+            log::info!("Read {len} bytes from file");
             easy.add_data(&readbuf);
         } else {
             log::error!("Out of data!");
@@ -175,7 +176,7 @@ async fn main(_spawner: Spawner) {
     // We're past the header now, so we should be able to correctly decode an MP3 frame
     // Metadata is stored in every frame, so check that now:
     if let Ok(frame) = easy.mp3_info() {
-        log::info!("First MP3 frame info: {:?}", frame);
+        log::info!("First MP3 frame info: {frame:?}");
     }
 
     let mut transfer = i2s_tx.write_dma_circular(tx_buffer).unwrap();
@@ -194,7 +195,7 @@ async fn main(_spawner: Spawner) {
             if easy.buffer_free() >= CHUNK_SZ {
                 if !f.is_eof() {
                     let len = f.read(&mut readbuf).unwrap();
-                    log::info!("Read {} bytes from file", len);
+                    log::info!("Read {len} bytes from file");
                     easy.add_data(&readbuf);
                 } else {
                     log::warn!("Out of data while filling decoder buffer!");
@@ -208,7 +209,7 @@ async fn main(_spawner: Spawner) {
                     data_len = samples;
                 },
                 Err(e) => {
-                    log::error!("Failed to decode MP3 frame: {:?}", e);
+                    log::error!("Failed to decode MP3 frame: {e:?}");
                 }
             }
         }
