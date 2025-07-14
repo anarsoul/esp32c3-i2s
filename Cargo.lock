@@ -335,6 +335,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -347,6 +357,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ff09972d4073aa8c299395be75161d582e7629cd663171d62af73c8d50dba3f"
 dependencies = [
  "embedded-io",
+]
+
+[[package]]
+name = "embedded-sdmmc"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce3c7f9ea039eeafc4a49597b7bd5ae3a1c8e51b2803a381cb0f29ce90fe1ec6"
+dependencies = [
+ "byteorder",
+ "embedded-hal 1.0.0",
+ "embedded-io",
+ "heapless",
+ "log",
 ]
 
 [[package]]
@@ -587,6 +610,8 @@ dependencies = [
  "critical-section",
  "embassy-executor",
  "embassy-time",
+ "embedded-hal-bus",
+ "embedded-sdmmc",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-hal-embassy",
@@ -1096,8 +1121,7 @@ dependencies = [
 [[package]]
 name = "threepm"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5797d891ee039f84344c92d4c52088aa130ba99f6f516768c7bdf0a50a289fdf"
+source = "git+https://github.com/anarsoul/ThreePM-rs.git#7f7814940aa7baf7ffd505d294792455362a2067"
 dependencies = [
  "cc",
  "libc",
