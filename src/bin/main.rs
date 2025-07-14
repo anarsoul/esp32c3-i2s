@@ -6,20 +6,19 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use bytemuck::cast_slice;
 use embassy_executor::Spawner;
 use esp_hal::clock::CpuClock;
-use esp_hal::{dma_buffers, ram};
-use esp_hal::timer::systimer::SystemTimer;
+use esp_hal::delay::Delay;
+use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::spi;
 use esp_hal::time::Rate;
+use esp_hal::timer::systimer::SystemTimer;
+use esp_hal::{dma_buffers, ram};
 use threepm::easy_mode::EasyMode;
-use bytemuck::cast_slice;
-use esp_hal::delay::Delay;
-use esp_hal::gpio::{Output, OutputConfig, Level};
 
-
-use embedded_sdmmc::{SdCard, VolumeManager, ShortFileName, VolumeIdx, Directory, Mode};
+use embedded_sdmmc::{Directory, Mode, SdCard, ShortFileName, VolumeIdx, VolumeManager};
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -49,29 +48,45 @@ impl embedded_sdmmc::TimeSource for TimeSource {
 }
 
 struct Error;
-type MyDirectory<'a, 'b> =  Directory<'a, SdCard<embedded_hal_bus::spi::ExclusiveDevice<spi::master::Spi<'b, esp_hal::Blocking>, Output<'b>, embedded_hal_bus::spi::NoDelay>, Delay>, TimeSource, 4, 4, 1>;
+type MyDirectory<'a, 'b> = Directory<
+    'a,
+    SdCard<
+        embedded_hal_bus::spi::ExclusiveDevice<
+            spi::master::Spi<'b, esp_hal::Blocking>,
+            Output<'b>,
+            embedded_hal_bus::spi::NoDelay,
+        >,
+        Delay,
+    >,
+    TimeSource,
+    4,
+    4,
+    1,
+>;
 
 fn list_dir(directory: MyDirectory<'_, '_>, path: &str) -> Result<(), Error> {
     log::info!("Listing {path}");
-    directory.iterate_dir(|entry| {
-        log::info!(
-            "{:12} {:9} {} {}",
-            entry.name,
-            entry.size,
-            entry.mtime,
-            if entry.attributes.is_directory() {
-                "<DIR>"
-            } else {
-                ""
+    directory
+        .iterate_dir(|entry| {
+            log::info!(
+                "{:12} {:9} {} {}",
+                entry.name,
+                entry.size,
+                entry.mtime,
+                if entry.attributes.is_directory() {
+                    "<DIR>"
+                } else {
+                    ""
+                }
+            );
+            if entry.attributes.is_directory()
+                && entry.name != ShortFileName::parent_dir()
+                && entry.name != ShortFileName::this_dir()
+            {
+                //children.push(entry.name.clone());
             }
-        );
-        if entry.attributes.is_directory()
-            && entry.name != ShortFileName::parent_dir()
-            && entry.name != ShortFileName::this_dir()
-        {
-            //children.push(entry.name.clone());
-        }
-    }).unwrap();
+        })
+        .unwrap();
     Ok(())
 }
 
@@ -108,7 +123,8 @@ async fn main(_spawner: Spawner) {
     .with_sck(sck);
 
     let delay = Delay::new();
-    let exclusive_spi = embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(sdmmc_spi, cs).unwrap();
+    let exclusive_spi =
+        embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(sdmmc_spi, cs).unwrap();
     let sdcard = SdCard::new(exclusive_spi, delay);
     // Get the card size (this also triggers card initialisation because it's not been done yet)
     log::info!("Card size is {} bytes", sdcard.num_bytes().unwrap());
@@ -136,7 +152,7 @@ async fn main(_spawner: Spawner) {
         Standard::Philips,
         DataFormat::Data16Channel16,
         Rate::from_hz(44100),
-        dma_channel
+        dma_channel,
     );
 
     log::info!("Configuring I2S instance");
@@ -207,7 +223,7 @@ async fn main(_spawner: Spawner) {
             match easy.decode(&mut decode_buf) {
                 Ok(samples) => {
                     data_len = samples;
-                },
+                }
                 Err(e) => {
                     log::error!("Failed to decode MP3 frame: {e:?}");
                 }
