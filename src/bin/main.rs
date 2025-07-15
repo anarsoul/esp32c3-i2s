@@ -10,13 +10,14 @@ use bytemuck::cast_slice;
 use embassy_executor::Spawner;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
-use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::gpio::{Level, NoPin, Output, OutputConfig};
 use esp_hal::i2s::master::{DataFormat, I2s, Standard};
 use esp_hal::spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::{dma_buffers, ram};
-use threepm::easy_mode::EasyMode;
+use fixed::types::I24F8;
+use threepm::easy_mode::{EasyMode, EasyModeErr};
 
 use embedded_sdmmc::{Directory, Mode, SdCard, ShortFileName, VolumeIdx, VolumeManager};
 
@@ -53,7 +54,7 @@ type MyDirectory<'a, 'b> = Directory<
     SdCard<
         embedded_hal_bus::spi::ExclusiveDevice<
             spi::master::Spi<'b, esp_hal::Blocking>,
-            Output<'b>,
+            NoPin,
             embedded_hal_bus::spi::NoDelay,
         >,
         Delay,
@@ -109,7 +110,7 @@ async fn main(_spawner: Spawner) {
     let mosi = peripherals.GPIO4;
     let miso = peripherals.GPIO2;
     let sck = peripherals.GPIO3;
-    let cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
+    let _cs = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
 
     let sdmmc_spi = spi::master::Spi::new(
         peripherals.SPI2,
@@ -124,7 +125,7 @@ async fn main(_spawner: Spawner) {
 
     let delay = Delay::new();
     let exclusive_spi =
-        embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(sdmmc_spi, cs).unwrap();
+        embedded_hal_bus::spi::ExclusiveDevice::new_no_delay(sdmmc_spi, NoPin).unwrap();
     let sdcard = SdCard::new(exclusive_spi, delay);
     // Get the card size (this also triggers card initialisation because it's not been done yet)
     log::info!("Card size is {} bytes", sdcard.num_bytes().unwrap());
@@ -157,7 +158,7 @@ async fn main(_spawner: Spawner) {
 
     log::info!("Configuring I2S instance");
 
-    let i2s = i2s.with_mclk(peripherals.GPIO9);
+    let _mclk = Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
     let mut i2s_tx = i2s
         .i2s_tx
         .with_bclk(peripherals.GPIO6)
@@ -196,6 +197,7 @@ async fn main(_spawner: Spawner) {
     }
 
     let mut transfer = i2s_tx.write_dma_circular(tx_buffer).unwrap();
+    let volume = I24F8::from_num(0.125); // 12.5%
     log::info!("Into main loop!");
     loop {
         let avail = transfer.available().unwrap();
@@ -223,10 +225,22 @@ async fn main(_spawner: Spawner) {
             match easy.decode(&mut decode_buf) {
                 Ok(samples) => {
                     data_len = samples;
+                    // apply volume control
+                    for sample in decode_buf.iter_mut() {
+                        let fixed = I24F8::from_num(*sample);
+                        let volume_corrected = fixed * volume;
+                        *sample = volume_corrected.to_num();
+                    }
                 }
-                Err(e) => {
-                    log::error!("Failed to decode MP3 frame: {e:?}");
-                }
+                Err(e) => match e {
+                    EasyModeErr::InDataUnderflow => {
+                        easy.skip_to_next_sync_word();
+                    }
+                    _ => {
+                        log::error!("Failed to decode MP3 frame: {e:?}");
+                        break;
+                    }
+                },
             }
         }
     }
